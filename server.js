@@ -1,41 +1,29 @@
-const express = require("express");
-const cors = require("cors");
-const { google } = require("googleapis");
-const fs = require("fs");
+import express from "express";
+import cors from "cors";
+import axios from "axios";
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
-const PORT = process.env.PORT || 3000;
+const BACKEND_URL = "https://tripg-proxyy.onrender.com/api/filter";
+const SECRET_TOKEN = process.env.SECRET_TOKEN;
 
-// Load service account credentials
-const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
-
-const auth = new google.auth.GoogleAuth({
-  credentials,
-  scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
-});
-
-const sheets = google.sheets({ version: "v4", auth });
-
-const SPREADSHEET_ID = "1g9BA_jTMjSHJei1ODaIrt6u5WAU_v7eVajqhsGzE9QA"; // Your real spreadsheet ID
-const RANGE = "Sheet1!A1:Z1000"; // Adjust range as needed
-
-app.get("/api/trip-data", async (req, res) => {
+app.post("/filter", async (req, res) => {
   try {
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: RANGE,
+    const response = await axios.post(BACKEND_URL, req.body, {
+      headers: {
+        "x-api-key": SECRET_TOKEN
+      }
     });
-
-    const rows = response.data.values || [];
-    res.json({ data: rows });
+    res.json(response.data);
   } catch (error) {
-    console.error("Error fetching data:", error);
-    res.status(500).send("Error fetching data from Google Sheets");
+    console.error("Proxy error:", error);
+    res.status(500).json({ error: "Proxy failed" });
   }
 });
 
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Proxy running securely on port ${PORT}`);
+  console.log(`Frontend proxy server running on port ${PORT}`);
 });
