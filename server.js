@@ -23,9 +23,9 @@ const sheets = google.sheets({ version: "v4", auth });
 const SPREADSHEET_ID = "1g9BA_jTMjSHJei1ODaIrt6u5WAU_v7eVajqhsGzE9QA";
 const RANGE = "part1!A1:Z1000";
 
-let cachedData = null;
+let cachedData = [];
 
-async function loadFullData() {
+async function loadData() {
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: RANGE,
@@ -34,10 +34,10 @@ async function loadFullData() {
   const rows = response.data.values || [];
   if (rows.length === 0) {
     console.error("No data found.");
-    return [];
+    return;
   }
   const headers = rows[0];
-  cachedData = rows.slice(1).map(row => {
+  cachedData = rows.slice(1).map((row) => {
     const obj = {};
     headers.forEach((header, index) => {
       obj[header] = row[index] || null;
@@ -48,25 +48,62 @@ async function loadFullData() {
   console.log("Data loaded.");
 }
 
-loadFullData().catch(console.error);
+loadData().catch(console.error);
 
-// API for filtering data
+// Fully protected main endpoint (final results)
 app.post("/api/filter", (req, res) => {
-  const { category, title, landuse, day, period } = req.body;
-
-  if (!cachedData) {
-    return res.status(500).json({ error: "Data not loaded." });
+  const apiKey = req.headers["x-api-key"];
+  if (!apiKey || apiKey !== process.env.SECRET_TOKEN) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const filtered = cachedData.filter(row =>
-    (!category || row["Category"] === category) &&
-    (!title || row["Title"] === title) &&
-    (!landuse || row["Landuse"] === landuse) &&
-    (!day || row["Day"] === day) &&
-    (!period || row["Period"] === period)
+  const { category, title, landuse, day, period } = req.body;
+
+  const filtered = cachedData.filter(
+    (row) =>
+      (!category || row["Category"] === category) &&
+      (!title || row["Title"] === title) &&
+      (!landuse || row["Landuse"] === landuse) &&
+      (!day || row["Day"] === day) &&
+      (!period || row["Period"] === period)
   );
 
-  res.json({ data: filtered });
+  const responseData = filtered.map((row) => ({
+    iteCode: row["ITE code"],
+    adjFactor: row["Adj Factor"],
+    avgRate: row["Avg Rate"],
+    studies: row["Studies"],
+    percentEnter: row["% Enter"],
+    percentExit: row["% Exit"],
+    equation: row["Equation"],
+  }));
+
+  res.json({ data: responseData });
+});
+
+// New endpoint: Filter Options (for frontend dynamic filters)
+app.post("/api/filter/options", (req, res) => {
+  const { category, title, landuse, day, period } = req.body;
+
+  const filtered = cachedData.filter(
+    (row) =>
+      (!category || row["Category"] === category) &&
+      (!title || row["Title"] === title) &&
+      (!landuse || row["Landuse"] === landuse) &&
+      (!day || row["Day"] === day) &&
+      (!period || row["Period"] === period)
+  );
+
+  const extractUnique = (key) =>
+    [...new Set(filtered.map((row) => row[key]).filter(Boolean))].sort();
+
+  res.json({
+    categories: extractUnique("Category"),
+    titles: extractUnique("Title"),
+    landuses: extractUnique("Landuse"),
+    days: extractUnique("Day"),
+    periods: extractUnique("Period"),
+  });
 });
 
 app.listen(PORT, () => {
